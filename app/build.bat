@@ -1,0 +1,1 @@
+pyinstaller --name bing-reward --onefile __main__.py
