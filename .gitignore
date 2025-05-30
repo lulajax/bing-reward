@@ -1,3 +1,4 @@
 build/
 .idea/
 *.spec
+app/node_modules/

@@ -1,0 +1,1 @@
+D:\Project\bing-reward\app\dist\bing-reward-parallel.exe 2 D:\\Users\\DevToolsUser1 D:\\Users\\DevToolsUser2
