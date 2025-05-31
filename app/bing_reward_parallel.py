@@ -2,6 +2,7 @@ import time
 import random
 import requests  # 导入 requests 库
 import os  # 导入 os 库
+import platform  # 导入 platform 用于检测操作系统
 from urllib.parse import quote  # 导入 quote 用于 URL 编码
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -9,7 +10,6 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import WebDriverException, SessionNotCreatedException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager  # 导入 ChromeDriverManager
 import argparse  # 导入 argparse 用于命令行参数处理
 import multiprocessing  # 导入 multiprocessing 用于并行处理
 
@@ -65,21 +65,109 @@ def generate_random_str(length):
     return ''.join(random.choice(chars) for _ in range(length))
 
 
+# 查找系统 ChromeDriver
+def find_system_chromedriver():
+    """查找系统中已安装的 ChromeDriver，支持多平台"""
+    import shutil
+    
+    # 首先尝试在 PATH 中查找（适用于所有平台）
+    chromedriver_path = shutil.which('chromedriver')
+    if chromedriver_path:
+        return chromedriver_path
+    
+    # 根据操作系统检查常见路径
+    system = platform.system().lower()
+    
+    if system == 'linux':
+        # Linux 常见路径
+        linux_paths = [
+            '/usr/bin/chromedriver',
+            '/usr/local/bin/chromedriver',
+            '/snap/bin/chromium.chromedriver',
+            '/usr/lib/chromium-browser/chromedriver',
+            '/opt/google/chrome/chromedriver',
+        ]
+        for path in linux_paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                return path
+                
+    elif system == 'darwin':  # macOS
+        # macOS 常见路径
+        macos_paths = [
+            '/usr/local/bin/chromedriver',
+            '/opt/homebrew/bin/chromedriver',
+            '/Applications/Google Chrome.app/Contents/MacOS/chromedriver',
+        ]
+        for path in macos_paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                return path
+                
+    elif system == 'windows':
+        # Windows 常见路径
+        windows_paths = [
+            r'C:\Program Files\Google\Chrome\Application\chromedriver.exe',
+            r'C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe',
+            r'C:\Windows\System32\chromedriver.exe',
+            r'C:\chromedriver.exe',
+        ]
+        for path in windows_paths:
+            if os.path.exists(path):
+                return path
+        
+        # Windows 下也尝试查找 .exe 版本
+        chromedriver_exe = shutil.which('chromedriver.exe')
+        if chromedriver_exe:
+            return chromedriver_exe
+    
+    return None
+
+
 # 设置 WebDriver 函数
-def setup_driver(user_data_dir, instance_num):
+def setup_driver(user_data_dir, instance_num, headless=False):
     log_prefix = f"[实例 {instance_num}] "
     print(f"{log_prefix}正在设置 WebDriver...")
     chrome_options = ChromeOptions()
-    chrome_options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-    )
+    
+    # 根据操作系统设置 User-Agent
+    system = platform.system().lower()
+    if system == 'linux':
+        user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    elif system == 'darwin':  # macOS
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    elif system == 'windows':
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    else:
+        user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    
+    # 基本设置
+    chrome_options.add_argument(f"user-agent={user_agent}")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--start-maximized")
-    # 对于并行无头模式，确保资源隔离和稳定性
-    # chrome_options.add_argument("--headless")
-    # chrome_options.add_argument("--disable-gpu") # 在无头模式或某些环境下可能需要
-    # chrome_options.add_argument("--window-size=1920,1080") # 无头模式下建议指定窗口大小
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-plugins")
+    chrome_options.add_argument("--disable-images")  # 禁用图片加载以提高性能
+    chrome_options.add_argument("--disable-javascript")  # 可选：禁用JavaScript以提高性能
+    
+    # 检查是否有GUI环境
+    has_display = True
+    if system == 'linux':
+        # Linux 检查 DISPLAY 环境变量
+        has_display = os.environ.get('DISPLAY') is not None
+    elif system == 'windows':
+        # Windows 通常有GUI，除非是 Windows Server Core
+        has_display = True
+    elif system == 'darwin':
+        # macOS 通常有GUI
+        has_display = True
+    
+    if headless or not has_display:
+        print(f"{log_prefix}使用无头模式运行")
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+    else:
+        print(f"{log_prefix}使用GUI模式运行")
+        chrome_options.add_argument("--start-maximized")
 
     if user_data_dir:
         if not os.path.exists(user_data_dir):
@@ -92,20 +180,34 @@ def setup_driver(user_data_dir, instance_num):
 
         if user_data_dir:
             print(f"{log_prefix}使用 Chrome 用户数据目录: {user_data_dir}")
-            print(
-                f"{log_prefix}警告: 使用指定用户数据目录可能会与正在运行的 Chrome 实例冲突。如果启动失败，请尝试关闭所有使用该配置文件的 Chrome 窗口后再试。")
             chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-            # chrome_options.add_argument("--profile-directory=Default") # 或其他 Profile
     else:
         print(f"{log_prefix}未提供有效的 Chrome 用户数据目录。将使用临时配置文件。")
 
     try:
         print(f"{log_prefix}正在设置 ChromeDriver...")
-        # 每个进程都将独立调用 ChromeDriverManager
-        service = ChromeService(ChromeDriverManager().install())
+        print(f"{log_prefix}检测到操作系统: {platform.system()}")
+        
+        # 首先尝试查找系统已安装的 ChromeDriver
+        system_chromedriver = find_system_chromedriver()
+        if system_chromedriver:
+            print(f"{log_prefix}使用系统 ChromeDriver: {system_chromedriver}")
+            service = ChromeService(system_chromedriver)
+        else:
+            print(f"{log_prefix}未找到系统 ChromeDriver，尝试使用 webdriver-manager...")
+            try:
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = ChromeService(ChromeDriverManager().install())
+                print(f"{log_prefix}webdriver-manager 下载成功")
+            except Exception as e:
+                print(f"{log_prefix}webdriver-manager 失败: {e}")
+                print(f"{log_prefix}请手动安装 ChromeDriver 或检查网络连接")
+                return None
+        
         driver = webdriver.Chrome(service=service, options=chrome_options)
         print(f"{log_prefix}ChromeDriver 启动成功。")
         return driver
+        
     except SessionNotCreatedException as e:
         print(f"{log_prefix}创建会话失败: {e}")
         print(f"{log_prefix}可能是由于用户数据目录冲突或 ChromeDriver/Chrome 版本问题。")
@@ -116,7 +218,7 @@ def setup_driver(user_data_dir, instance_num):
 
 
 # 运行搜索函数 (这是每个进程将执行的函数)
-def run_search(user_data_dir, instance_num):
+def run_search(user_data_dir, instance_num, headless=False):
     log_prefix = f"[实例 {instance_num}] "
     print(f"{log_prefix}--- 开始运行 (用户目录: {user_data_dir or '临时配置'}) ---")
     max_searches = 40  # 可以考虑将此值也作为参数传入，如果希望每个实例搜索次数不同
@@ -128,7 +230,7 @@ def run_search(user_data_dir, instance_num):
         print(f"{log_prefix}无法获取搜索词，程序退出。")
         return
 
-    driver = setup_driver(user_data_dir, instance_num)
+    driver = setup_driver(user_data_dir, instance_num, headless)
 
     if not driver:
         print(f"{log_prefix}WebDriver 启动失败，程序退出。")
@@ -179,7 +281,6 @@ def run_search(user_data_dir, instance_num):
                 print(f"{log_prefix}在搜索循环中发生意外错误: {str(e)}")
                 break
 
-
     except KeyboardInterrupt:
         # KeyboardInterrupt 通常由主进程捕获，子进程可能以不同方式响应
         print(f"{log_prefix}用户中断了进程 (或主进程已终止)。")
@@ -207,7 +308,8 @@ if __name__ == "__main__":
                         help="Chrome 用户数据目录的路径列表。数量必须与 num_instances 匹配。")
     parser.add_argument("--max_parallel", type=int, default=None,
                         help="最大并行运行的实例数。默认为 num_instances（即全部并行）。")
-
+    parser.add_argument("--headless", action="store_true",
+                        help="强制使用无头模式运行浏览器（无GUI）。")
 
     args = parser.parse_args()
 
@@ -227,6 +329,9 @@ if __name__ == "__main__":
 
     print(f"准备并行运行 {args.num_instances} 个浏览器实例 (最大同时运行 {max_concurrent_processes} 个)...")
     print("警告: 并行运行多个浏览器实例会消耗大量系统资源 (CPU 和内存)。请确保您的计算机配置充足。")
+    
+    if args.headless:
+        print("使用无头模式运行所有实例。")
 
     processes = []
     running_processes = []  # 用于跟踪当前正在运行的进程
@@ -247,7 +352,7 @@ if __name__ == "__main__":
 
             print(f"主程序: 准备启动实例 {instance_number} 使用用户目录: '{user_data_directory}'")
             # 创建进程
-            process = multiprocessing.Process(target=run_search, args=(user_data_directory, instance_number))
+            process = multiprocessing.Process(target=run_search, args=(user_data_directory, instance_number, args.headless))
             processes.append(process)
             running_processes.append(process)
             process.start()
