@@ -188,20 +188,22 @@ def setup_driver(user_data_dir, instance_num, headless=False):
         print(f"{log_prefix}正在设置 ChromeDriver...")
         print(f"{log_prefix}检测到操作系统: {platform.system()}")
         
-        # 首先尝试查找系统已安装的 ChromeDriver
-        system_chromedriver = find_system_chromedriver()
-        if system_chromedriver:
-            print(f"{log_prefix}使用系统 ChromeDriver: {system_chromedriver}")
-            service = ChromeService(system_chromedriver)
-        else:
-            print(f"{log_prefix}未找到系统 ChromeDriver，尝试使用 webdriver-manager...")
-            try:
-                from webdriver_manager.chrome import ChromeDriverManager
-                service = ChromeService(ChromeDriverManager().install())
-                print(f"{log_prefix}webdriver-manager 下载成功")
-            except Exception as e:
-                print(f"{log_prefix}webdriver-manager 失败: {e}")
-                print(f"{log_prefix}请手动安装 ChromeDriver 或检查网络连接")
+        # 优先使用 webdriver-manager 自动下载最新版本的 ChromeDriver
+        print(f"{log_prefix}使用 webdriver-manager 自动下载 ChromeDriver...")
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = ChromeService(ChromeDriverManager().install())
+            print(f"{log_prefix}webdriver-manager 下载成功")
+        except Exception as e:
+            print(f"{log_prefix}webdriver-manager 失败: {e}")
+            # 如果 webdriver-manager 失败，才尝试查找系统已安装的 ChromeDriver
+            print(f"{log_prefix}尝试查找系统已安装的 ChromeDriver...")
+            system_chromedriver = find_system_chromedriver()
+            if system_chromedriver:
+                print(f"{log_prefix}使用系统 ChromeDriver: {system_chromedriver}")
+                service = ChromeService(system_chromedriver)
+            else:
+                print(f"{log_prefix}未找到系统 ChromeDriver，请手动安装 ChromeDriver 或检查网络连接")
                 return None
         
         driver = webdriver.Chrome(service=service, options=chrome_options)
