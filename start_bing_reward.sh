@@ -23,10 +23,10 @@ mkdir -p /app/bing-reward/chrome_profiles/user3
 
 # 激活虚拟环境
 echo "激活虚拟环境..."
-source venv/bin/activate
+source /app/bing-reward/venv/bin/activate
 
 # 运行脚本
 echo "启动 Bing 奖励脚本 (3个实例，最大并行数3)..."
-python app/bing_reward_parallel.py 3 /app/bing-reward/chrome_profiles/user1 /app/bing-reward/chrome_profiles/user2 /app/bing-reward/chrome_profiles/user3 --max_parallel 3
+python /app/bing-reward/app/bing_reward_parallel.py 3 /app/bing-reward/chrome_profiles/user1 /app/bing-reward/chrome_profiles/user2 /app/bing-reward/chrome_profiles/user3 --max_parallel 3
 
 echo "脚本运行完成" 
