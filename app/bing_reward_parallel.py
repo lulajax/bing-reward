@@ -148,19 +148,8 @@ def setup_driver(user_data_dir, instance_num, headless=False):
     chrome_options.add_argument("--disable-images")  # 禁用图片加载以提高性能
     chrome_options.add_argument("--disable-javascript")  # 可选：禁用JavaScript以提高性能
     
-    # 检查是否有GUI环境
-    has_display = True
-    if system == 'linux':
-        # Linux 检查 DISPLAY 环境变量
-        has_display = os.environ.get('DISPLAY') is not None
-    elif system == 'windows':
-        # Windows 通常有GUI，除非是 Windows Server Core
-        has_display = True
-    elif system == 'darwin':
-        # macOS 通常有GUI
-        has_display = True
-    
-    if headless or not has_display:
+    # 只有在明确指定 headless 参数时才使用无头模式
+    if headless:
         print(f"{log_prefix}使用无头模式运行")
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
